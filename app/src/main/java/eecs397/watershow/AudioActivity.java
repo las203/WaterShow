@@ -1,28 +1,27 @@
 package eecs397.watershow;
 
-import android.content.ContentResolver;
-import android.content.ContentUris;
-import android.content.Context;
 import android.content.Intent;
-import android.database.Cursor;
 import android.media.AudioManager;
+import android.media.AudioRecord;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.util.Log;
 import android.view.View;
-import android.view.WindowManager;
 import android.widget.Button;
 
 import java.io.IOException;
 
-public class AudioActivity extends AppCompatActivity {
+public class AudioActivity extends AppCompatActivity{
 
     MediaPlayer player;
+    AudioRecord recorder;
+    Thread thread;
     final static int RQS_OPEN_AUDIO_MP3 = 1;
+    final static int ENCODING_PCM_16BIT = 2;
+    boolean started = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,6 +64,11 @@ public class AudioActivity extends AppCompatActivity {
     void stopAudio() {
         if (player != null)
             player.release();
+        if (recorder != null) {
+            recorder.stop();
+            recorder.release();
+        }
+        started = false;
     }
 
     void playAudio(Uri uri) {
@@ -77,5 +81,41 @@ public class AudioActivity extends AppCompatActivity {
                 e.printStackTrace();
             }
         player.start();
+        started = true;
+        Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    int blockSize = AudioRecord.getMinBufferSize(44100, 12, ENCODING_PCM_16BIT);
+                    recorder = new AudioRecord(0, 44100, 12, ENCODING_PCM_16BIT, blockSize);
+                    if(recorder == null){
+                        Log.e("AudioRecord", "Recorder is null");
+                    }
+
+                    final short[] buffer = new short[blockSize];
+                    final double[] toTransform = new double[blockSize];
+
+                    recorder.startRecording();
+
+                    while (started) {
+                        final int bufferReadResult = recorder.read(buffer, 0, blockSize);
+                        Log.e("AudioRecord", "Recording");
+                        for (int i = 0; i < blockSize && i < bufferReadResult; i++) {
+                            toTransform[i] = (double) buffer[i] / 32768.0; // signed 16 bit
+                        }
+
+                        //    transformer.ft(toTransform);
+                        //    publishProgress(toTransform);
+
+                    }
+                    recorder.stop();
+                    recorder.release();
+                } catch (Throwable t) {
+                    Log.e("AudioRecord", "Recording Failed");
+                }
+            }
+        };
+        thread = new Thread(runnable);
+        thread.start();
     }
 }
