@@ -22,6 +22,7 @@ import java.io.IOException;
 public class AudioActivity extends AppCompatActivity {
 
     MediaPlayer player;
+    final static int RQS_OPEN_AUDIO_MP3 = 1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,34 +43,39 @@ public class AudioActivity extends AppCompatActivity {
         play.setText("Play");
         play.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                //Intent intent = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI);
-                //startActivityForResult(intent, 10);
-                playAudio();
+                Intent intent = new Intent();
+                intent.setType("audio/mp3");
+                intent.setAction(Intent.ACTION_GET_CONTENT);
+                startActivityForResult(Intent.createChooser(
+                        intent, "Open Audio (mp3) file"), RQS_OPEN_AUDIO_MP3);
             }
         });
     }
 
-    /*@Override
+    @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == RESULT_OK && requestCode == 10) {
-            Uri uriSound = data.getData();
-            //playAudio(uriSound);
+        if (resultCode == RESULT_OK) {
+            if (requestCode == RQS_OPEN_AUDIO_MP3) {
+                Uri audioFileUri = data.getData();
+                playAudio(audioFileUri);
+            }
         }
-    }*/
+    }
 
     void stopAudio() {
         if (player != null)
             player.release();
     }
 
-    void playAudio() {
-        player = MediaPlayer.create(this, R.raw.ghost);
+    void playAudio(Uri uri) {
+        player = new MediaPlayer();
         player.setAudioStreamType(AudioManager.STREAM_MUSIC);
+        try {
+            player.setDataSource(getApplicationContext(), uri);
+            player.prepare();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         player.start();
-    }
-
-    //Not quite sure how to do this easily yet
-    void pickMusic() {
-
     }
 }
