@@ -1,5 +1,8 @@
 package eecs397.watershow;
 
+import android.media.AudioManager;
+import android.media.MediaPlayer;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
@@ -53,7 +56,9 @@ public class MainActivity extends AppCompatActivity {
                         .setAction("Action", null).show();
             }
         });
-        if (enableBluetooth()) {
+        Intent intent = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI);
+        startActivityForResult(intent, 10);
+        /*if (enableBluetooth()) {
             btnOn.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     Log.d(TAG, "Click 1");
@@ -69,7 +74,27 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(getBaseContext(), "Turn off LED", Toast.LENGTH_SHORT).show();
                 }
             });
+        }*/
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == RESULT_OK && requestCode == 10) {
+            Uri uriSound = data.getData();
+            playAudio(uriSound);
         }
+    }
+
+    void playAudio(Uri uri) {
+        MediaPlayer player = new MediaPlayer();
+        player.setAudioStreamType(AudioManager.STREAM_MUSIC);
+        try {
+            player.setDataSource(getApplicationContext(), uri);
+            player.prepare();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        player.start();
     }
 
     @Override
