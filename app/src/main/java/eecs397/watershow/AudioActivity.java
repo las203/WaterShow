@@ -11,13 +11,24 @@ import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.TextView;
+
+import be.tarsos.dsp.AudioDispatcher;
+import be.tarsos.dsp.AudioEvent;
+import be.tarsos.dsp.AudioProcessor;
+import be.tarsos.dsp.SpectralPeakProcessor;
+import be.tarsos.dsp.filters.BandPass;
+import be.tarsos.dsp.io.android.AudioDispatcherFactory;
+import be.tarsos.dsp.pitch.PitchDetectionHandler;
+import be.tarsos.dsp.pitch.PitchDetectionResult;
+import be.tarsos.dsp.pitch.PitchProcessor;
 
 import java.io.IOException;
 
 public class AudioActivity extends AppCompatActivity{
 
     MediaPlayer player;
-    AudioRecord recorder;
+    //AudioRecord recorder;
     Thread thread;
     final static int RQS_OPEN_AUDIO_MP3 = 1;
     final static int ENCODING_PCM_16BIT = 2;
@@ -64,10 +75,10 @@ public class AudioActivity extends AppCompatActivity{
     void stopAudio() {
         if (player != null)
             player.release();
-        if (recorder != null) {
-            recorder.stop();
-            recorder.release();
-        }
+        //if (recorder != null) {
+          //  recorder.stop();
+            //recorder.release();
+        //}
         started = false;
     }
 
@@ -81,17 +92,46 @@ public class AudioActivity extends AppCompatActivity{
                 e.printStackTrace();
             }
         player.start();
-        started = true;
-        Runnable runnable = new Runnable() {
+
+        BandPass lowFilter = new BandPass(300, 200, 44100);
+        BandPass medFilter = new BandPass(2000, 1500, 44100);
+        BandPass highFilter = new BandPass(8000, 4000, 44100);
+        AudioDispatcher dispatcher = AudioDispatcherFactory.fromDefaultMicrophone(44100, 2048, 0);
+
+        SpectralPeakProcessor pdh = new SpectralPeakProcessor() {
+            @Override
+            public void handlePitch(PitchDetectionResult result, AudioEvent e) {
+                final float pitchInHz = result.getPitch();
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                    }
+                });
+            }
+        };
+
+        dispatcher.addAudioProcessor(lowFilter);
+        dispatcher.addAudioProcessor(medFilter);
+        dispatcher.addAudioProcessor(highFilter);
+        new Thread(dispatcher,"Audio Dispatcher").start();
+        //started = true;
+        /*Runnable runnable = new Runnable() {
             @Override
             public void run() {
-                try {
+                BandPass lowFilter = new BandPass(300, 200, 44100);
+                BandPass medFilter = new BandPass(2000, 1500, 44100);
+                BandPass highFilter = new BandPass(8000, 4000, 44100);
+                AudioDispatcher dispatcher = AudioDispatcherFactory.fromDefaultMicrophone(44100, 2048, 0);
+                dispatcher.addAudioProcessor(lowFilter);
+                dispatcher.addAudioProcessor(medFilter);
+                dispatcher.addAudioProcessor(highFilter);
+                dispatcher.run();
+                /*try {
                     int blockSize = AudioRecord.getMinBufferSize(44100, 12, ENCODING_PCM_16BIT);
                     recorder = new AudioRecord(0, 44100, 12, ENCODING_PCM_16BIT, blockSize);
                     if(recorder == null){
                         Log.e("AudioRecord", "Recorder is null");
                     }
-
                     final short[] buffer = new short[blockSize];
                     final double[] toTransform = new double[blockSize];
 
@@ -115,7 +155,7 @@ public class AudioActivity extends AppCompatActivity{
                 }
             }
         };
-        thread = new Thread(runnable);
-        thread.start();
+        thread = new Thread(runnable, "AudioDispatcher");
+        thread.start();*/
     }
 }
