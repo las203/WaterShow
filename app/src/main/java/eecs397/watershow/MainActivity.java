@@ -1,7 +1,10 @@
 package eecs397.watershow;
 
+import android.media.AudioFormat;
 import android.media.AudioManager;
+import android.media.AudioRecord;
 import android.media.MediaPlayer;
+import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -23,7 +26,17 @@ import android.widget.Toast;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.ShortBuffer;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.UUID;
+import java.util.logging.Handler;
+
+import be.tarsos.dsp.AudioEvent;
+import be.tarsos.dsp.filters.BandPass;
+import be.tarsos.dsp.io.TarsosDSPAudioFormat;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -37,6 +50,19 @@ public class MainActivity extends AppCompatActivity {
     private static final UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
     // MAC-address of Bluetooth module (you must edit this line)
     private static String address = "60:BE:B5:B8:05:6D";
+    boolean choosingMusic = false;
+
+    MediaPlayer player;
+    AudioRecord recorder;
+    Thread thread;
+    Uri file;
+    BandPass lowFilter = new BandPass(300, 200, 44100);
+    BandPass medFilter = new BandPass(2000, 1500, 44100);
+    BandPass highFilter = new BandPass(8000, 4000, 44100);
+    final static int RQS_OPEN_AUDIO_MP3 = 1;
+    final static int ENCODING_PCM_16BIT = 2;
+    boolean started = false;
+    byte[] filteredBuffer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,49 +70,103 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         btnOn = (Button) findViewById(R.id.btnOn);
+        btnOn.setText("Play");
         btnOff = (Button) findViewById(R.id.btnOff);
+        btnOff.setText("Stop");
 
-        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
-        fab.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
-            }
-        });
-        Intent intent = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI);
-        startActivityForResult(intent, 10);
-        /*if (enableBluetooth()) {
+        if (enableBluetooth()) {
             btnOn.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
-                    Log.d(TAG, "Click 1");
+                    /*Log.d(TAG, "Click 1");
                     sendData("1");
                     Toast.makeText(getBaseContext(), "Turn on LED", Toast.LENGTH_SHORT).show();
+                    */
+                    choosingMusic = true;
+                    Intent intent = new Intent();
+                    intent.setType("audio/mp3");
+                    intent.setAction(Intent.ACTION_GET_CONTENT);
+                    startActivityForResult(Intent.createChooser(
+                            intent, "Open Audio (mp3) file"), RQS_OPEN_AUDIO_MP3);
+                    //playAudio(file);
+                    choosingMusic = false;
+
+
+                    // Set up a pointer to the remote node using it's address.
+                    BluetoothDevice device = adapter.getRemoteDevice(address);
+
+                    // Two things are needed to make a connection:
+                    //   A MAC address, which we got above.
+                    //   A Service ID or UUID.  In this case we are using the
+                    //     UUID for SPP.
+
+                    try {
+                        socket = createBluetoothSocket(device);
+                    } catch (IOException e1) {
+                        errorExit("Fatal Error", "In onResume() and socket create failed: " + e1.getMessage() + ".");
+                    }
+
+                    // Discovery is resource intensive.  Make sure it isn't going on
+                    // when you attempt to connect and pass your message.
+                    adapter.cancelDiscovery();
+
+                    // Establish the connection.  This will block until it connects.
+                    Log.d(TAG, "...Connecting...");
+                    try {
+                        socket.connect();
+                        Log.d(TAG, "...Connection ok...");
+                    } catch (IOException e) {
+                        try {
+                            socket.close();
+                        } catch (IOException e2) {
+                            errorExit("Fatal Error", "In onResume() and unable to close socket during connection failure" + e2.getMessage() + ".");
+                        }
+                    }
+
+                    // Create a data stream so we can talk to server.
+                    Log.d(TAG, "...Create Socket...");
+
+                    try {
+                        stream = socket.getOutputStream();
+                    } catch (IOException e) {
+                        errorExit("Fatal Error", "In onResume() and output stream creation failed:" + e.getMessage() + ".");
+                    }
+                    new Timer().schedule(new TimerTask() {
+                        @Override
+                        public void run() {
+                            playAudio(file);// this code will be executed after 2 seconds
+                        }
+                    }, 7000);
+
                 }
             });
 
             btnOff.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
-                    sendData("0");
+                    /*sendData("0");
                     Log.d(TAG, "Click2");
                     Toast.makeText(getBaseContext(), "Turn off LED", Toast.LENGTH_SHORT).show();
+                    */
+                    if (player != null)
+                        player.release();
+                    if (recorder != null) {
+                        recorder.stop();
+                        recorder.release();
+                    }
+                    started = false;
                 }
             });
-        }*/
+        }
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == RESULT_OK && requestCode == 10) {
-            Uri uriSound = data.getData();
-            playAudio(uriSound);
+            file = data.getData();
         }
     }
 
     void playAudio(Uri uri) {
-        MediaPlayer player = new MediaPlayer();
+        player = new MediaPlayer();
         player.setAudioStreamType(AudioManager.STREAM_MUSIC);
         try {
             player.setDataSource(getApplicationContext(), uri);
@@ -95,28 +175,88 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
         player.start();
-    }
+/*
+        BandPass lowFilter = new BandPass(300, 200, 44100);
+        BandPass medFilter = new BandPass(2000, 1500, 44100);
+        BandPass highFilter = new BandPass(8000, 4000, 44100);
+        AudioDispatcher dispatcher = AudioDispatcherFactory.fromDefaultMicrophone(44100, 2048, 0);
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_main, menu);
-        return true;
-    }
+        SpectralPeakProcessor pdh = new SpectralPeakProcessor() {
+            @Override
+            public void handlePitch(PitchDetectionResult result, AudioEvent e) {
+                final float pitchInHz = result.getPitch();
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                    }
+                });
+            }
+        };
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
+        dispatcher.addAudioProcessor(lowFilter);
+        dispatcher.addAudioProcessor(medFilter);
+        dispatcher.addAudioProcessor(highFilter);
+        new Thread(dispatcher,"Audio Dispatcher").start();*/
+        started = true;
+        final Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    int blockSize = 2 * AudioRecord.getMinBufferSize(8000, AudioFormat.CHANNEL_IN_MONO,
+                            AudioFormat.ENCODING_PCM_16BIT);
+                    final TarsosDSPAudioFormat format = new TarsosDSPAudioFormat(8000, 8, 1, true, false);
+                    recorder = new AudioRecord(MediaRecorder.AudioSource.MIC, 8000, AudioFormat.CHANNEL_IN_MONO,
+                            AudioFormat.ENCODING_PCM_16BIT, blockSize);
+                    if(recorder == null){
+                        Log.e("AudioRecord", "Recorder is null");
+                    }
 
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
-        }
+                    byte[] byteBuffer = new byte[blockSize];
+                    recorder.startRecording();
 
-        return super.onOptionsItemSelected(item);
+
+                    while (started) {
+                        final int bufferReadResult = recorder.read(byteBuffer, 0, blockSize);
+                        Log.e("AudioRecord", "Recording");
+                        AudioEvent audioEvent = new AudioEvent(format, bufferReadResult);
+                        ShortBuffer sbuf =
+                                ByteBuffer.wrap(byteBuffer).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
+                        short[] audioShorts = new short[sbuf.capacity()];
+                        sbuf.get(audioShorts);
+                        float[] audioFloats = new float[audioShorts.length];
+                        for (int j = 0; j < audioShorts.length; j++) {
+                            audioFloats[j] = ((float)audioShorts[j])/0x8000;
+                        }
+                        audioEvent.setFloatBuffer(audioFloats);
+                        highFilter.process(audioEvent);
+                        filteredBuffer = audioEvent.getByteBuffer();
+                        for (byte aFilteredBuffer : filteredBuffer) {
+                            Log.e("FilterValue", Byte.toString(aFilteredBuffer));
+                        }
+                        if (stream != null) {
+                            try {
+                                stream.flush();
+                            } catch (IOException e) {
+                                errorExit("Fatal Error", "In onPause() and failed to flush output stream: " + e.getMessage() + ".");
+                            }
+                        }
+
+                        try     {
+                            socket.close();
+                        } catch (IOException e2) {
+                            errorExit("Fatal Error", "In onPause() and failed to close socket." + e2.getMessage() + ".");
+                        }
+                    }
+
+                    recorder.stop();
+                    recorder.release();
+                } catch (Throwable t) {
+                    Log.e("AudioRecord", "Recording Failed");
+                }
+            }
+        };
+        thread = new Thread(runnable, "AudioDispatcher");
+        thread.start();
     }
 
     boolean enableBluetooth() {
@@ -129,8 +269,10 @@ public class MainActivity extends AppCompatActivity {
         }
         else {
             if (!adapter.isEnabled()) {
-                Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-                startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
+                //Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+                //startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
+                Log.e("Bluetooth", "Enable bluetooth, please.");
+                return false;
             }
             return true;
         }
@@ -147,51 +289,52 @@ public class MainActivity extends AppCompatActivity {
         }
         return  device.createRfcommSocketToServiceRecord(MY_UUID);
     }
-
+/*
     @Override
     public void onResume() {
         super.onResume();
 
         Log.d(TAG, "...onResume - try connect...");
+        if (!choosingMusic) {
+            // Set up a pointer to the remote node using it's address.
+            BluetoothDevice device = adapter.getRemoteDevice(address);
 
-        // Set up a pointer to the remote node using it's address.
-        BluetoothDevice device = adapter.getRemoteDevice(address);
+            // Two things are needed to make a connection:
+            //   A MAC address, which we got above.
+            //   A Service ID or UUID.  In this case we are using the
+            //     UUID for SPP.
 
-        // Two things are needed to make a connection:
-        //   A MAC address, which we got above.
-        //   A Service ID or UUID.  In this case we are using the
-        //     UUID for SPP.
-
-        try {
-            socket = createBluetoothSocket(device);
-        } catch (IOException e1) {
-            errorExit("Fatal Error", "In onResume() and socket create failed: " + e1.getMessage() + ".");
-        }
-
-        // Discovery is resource intensive.  Make sure it isn't going on
-        // when you attempt to connect and pass your message.
-        adapter.cancelDiscovery();
-
-        // Establish the connection.  This will block until it connects.
-        Log.d(TAG, "...Connecting...");
-        try {
-            socket.connect();
-            Log.d(TAG, "...Connection ok...");
-        } catch (IOException e) {
             try {
-                socket.close();
-            } catch (IOException e2) {
-                errorExit("Fatal Error", "In onResume() and unable to close socket during connection failure" + e2.getMessage() + ".");
+                socket = createBluetoothSocket(device);
+            } catch (IOException e1) {
+                errorExit("Fatal Error", "In onResume() and socket create failed: " + e1.getMessage() + ".");
             }
-        }
 
-        // Create a data stream so we can talk to server.
-        Log.d(TAG, "...Create Socket...");
+            // Discovery is resource intensive.  Make sure it isn't going on
+            // when you attempt to connect and pass your message.
+            adapter.cancelDiscovery();
 
-        try {
-            stream = socket.getOutputStream();
-        } catch (IOException e) {
-            errorExit("Fatal Error", "In onResume() and output stream creation failed:" + e.getMessage() + ".");
+            // Establish the connection.  This will block until it connects.
+            Log.d(TAG, "...Connecting...");
+            try {
+                socket.connect();
+                Log.d(TAG, "...Connection ok...");
+            } catch (IOException e) {
+                try {
+                    socket.close();
+                } catch (IOException e2) {
+                    errorExit("Fatal Error", "In onResume() and unable to close socket during connection failure" + e2.getMessage() + ".");
+                }
+            }
+
+            // Create a data stream so we can talk to server.
+            Log.d(TAG, "...Create Socket...");
+
+            try {
+                stream = socket.getOutputStream();
+            } catch (IOException e) {
+                errorExit("Fatal Error", "In onResume() and output stream creation failed:" + e.getMessage() + ".");
+            }
         }
     }
 
@@ -200,7 +343,7 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
 
         Log.d(TAG, "...In onPause()...");
-
+        if (!choosingMusic) {
         if (stream != null) {
             try {
                 stream.flush();
@@ -214,8 +357,9 @@ public class MainActivity extends AppCompatActivity {
         } catch (IOException e2) {
             errorExit("Fatal Error", "In onPause() and failed to close socket." + e2.getMessage() + ".");
         }
+        }
     }
-
+*/
     private void errorExit(String title, String message){
         Toast.makeText(getBaseContext(), title + " - " + message, Toast.LENGTH_LONG).show();
         finish();
