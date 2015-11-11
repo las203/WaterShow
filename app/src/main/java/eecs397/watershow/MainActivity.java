@@ -82,61 +82,14 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(getBaseContext(), "Turn on LED", Toast.LENGTH_SHORT).show();
                     */
                     choosingMusic = true;
-                    Intent intent = new Intent();
+                    /*Intent intent = new Intent();
                     intent.setType("audio/mp3");
                     intent.setAction(Intent.ACTION_GET_CONTENT);
                     startActivityForResult(Intent.createChooser(
-                            intent, "Open Audio (mp3) file"), RQS_OPEN_AUDIO_MP3);
+                            intent, "Open Audio (mp3) file"), RQS_OPEN_AUDIO_MP3);*/
                     //playAudio(file);
                     choosingMusic = false;
-
-
-                    // Set up a pointer to the remote node using it's address.
-                    BluetoothDevice device = adapter.getRemoteDevice(address);
-
-                    // Two things are needed to make a connection:
-                    //   A MAC address, which we got above.
-                    //   A Service ID or UUID.  In this case we are using the
-                    //     UUID for SPP.
-
-                    try {
-                        socket = createBluetoothSocket(device);
-                    } catch (IOException e1) {
-                        errorExit("Fatal Error", "In onResume() and socket create failed: " + e1.getMessage() + ".");
-                    }
-
-                    // Discovery is resource intensive.  Make sure it isn't going on
-                    // when you attempt to connect and pass your message.
-                    adapter.cancelDiscovery();
-
-                    // Establish the connection.  This will block until it connects.
-                    Log.d(TAG, "...Connecting...");
-                    try {
-                        socket.connect();
-                        Log.d(TAG, "...Connection ok...");
-                    } catch (IOException e) {
-                        try {
-                            socket.close();
-                        } catch (IOException e2) {
-                            errorExit("Fatal Error", "In onResume() and unable to close socket during connection failure" + e2.getMessage() + ".");
-                        }
-                    }
-
-                    // Create a data stream so we can talk to server.
-                    Log.d(TAG, "...Create Socket...");
-
-                    try {
-                        stream = socket.getOutputStream();
-                    } catch (IOException e) {
-                        errorExit("Fatal Error", "In onResume() and output stream creation failed:" + e.getMessage() + ".");
-                    }
-                    new Timer().schedule(new TimerTask() {
-                        @Override
-                        public void run() {
-                            playAudio(file);// this code will be executed after 2 seconds
-                        }
-                    }, 7000);
-
+                    playAudio();
                 }
             });
 
@@ -158,22 +111,16 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @Override
+   /* @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == RESULT_OK && requestCode == 10) {
             file = data.getData();
         }
     }
-
-    void playAudio(Uri uri) {
-        player = new MediaPlayer();
+*/
+    void playAudio() {
+        player = MediaPlayer.create(getApplicationContext(), R.raw.ghose);
         player.setAudioStreamType(AudioManager.STREAM_MUSIC);
-        try {
-            player.setDataSource(getApplicationContext(), uri);
-            player.prepare();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
         player.start();
 /*
         BandPass lowFilter = new BandPass(300, 200, 44100);
@@ -202,7 +149,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 try {
-                    int blockSize = 2 * AudioRecord.getMinBufferSize(8000, AudioFormat.CHANNEL_IN_MONO,
+                    int blockSize = 3 * AudioRecord.getMinBufferSize(8000, AudioFormat.CHANNEL_IN_MONO,
                             AudioFormat.ENCODING_PCM_16BIT);
                     final TarsosDSPAudioFormat format = new TarsosDSPAudioFormat(8000, 8, 1, true, false);
                     recorder = new AudioRecord(MediaRecorder.AudioSource.MIC, 8000, AudioFormat.CHANNEL_IN_MONO,
@@ -231,20 +178,8 @@ public class MainActivity extends AppCompatActivity {
                         highFilter.process(audioEvent);
                         filteredBuffer = audioEvent.getByteBuffer();
                         for (byte aFilteredBuffer : filteredBuffer) {
-                            Log.e("FilterValue", Byte.toString(aFilteredBuffer));
-                        }
-                        if (stream != null) {
-                            try {
-                                stream.flush();
-                            } catch (IOException e) {
-                                errorExit("Fatal Error", "In onPause() and failed to flush output stream: " + e.getMessage() + ".");
-                            }
-                        }
-
-                        try     {
-                            socket.close();
-                        } catch (IOException e2) {
-                            errorExit("Fatal Error", "In onPause() and failed to close socket." + e2.getMessage() + ".");
+                            //Log.e("FilterValue", Byte.toString(aFilteredBuffer));
+                            sendData(Byte.toString(aFilteredBuffer));
                         }
                     }
 
@@ -289,7 +224,7 @@ public class MainActivity extends AppCompatActivity {
         }
         return  device.createRfcommSocketToServiceRecord(MY_UUID);
     }
-/*
+
     @Override
     public void onResume() {
         super.onResume();
@@ -359,7 +294,7 @@ public class MainActivity extends AppCompatActivity {
         }
         }
     }
-*/
+
     private void errorExit(String title, String message){
         Toast.makeText(getBaseContext(), title + " - " + message, Toast.LENGTH_LONG).show();
         finish();
