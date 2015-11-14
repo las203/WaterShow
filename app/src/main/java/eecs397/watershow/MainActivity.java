@@ -49,7 +49,7 @@ public class MainActivity extends AppCompatActivity {
     // SPP UUID service
     private static final UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
     // MAC-address of Bluetooth module (you must edit this line)
-    private static String address = "60:BE:B5:B8:05:6D";
+    private static String address = "00:06:66:7B:93:01";
     boolean choosingMusic = false;
 
     MediaPlayer player;
@@ -111,39 +111,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-   /* @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == RESULT_OK && requestCode == 10) {
-            file = data.getData();
-        }
-    }
-*/
     void playAudio() {
         player = MediaPlayer.create(getApplicationContext(), R.raw.ghose);
         player.setAudioStreamType(AudioManager.STREAM_MUSIC);
         player.start();
-/*
-        BandPass lowFilter = new BandPass(300, 200, 44100);
-        BandPass medFilter = new BandPass(2000, 1500, 44100);
-        BandPass highFilter = new BandPass(8000, 4000, 44100);
-        AudioDispatcher dispatcher = AudioDispatcherFactory.fromDefaultMicrophone(44100, 2048, 0);
-
-        SpectralPeakProcessor pdh = new SpectralPeakProcessor() {
-            @Override
-            public void handlePitch(PitchDetectionResult result, AudioEvent e) {
-                final float pitchInHz = result.getPitch();
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                    }
-                });
-            }
-        };
-
-        dispatcher.addAudioProcessor(lowFilter);
-        dispatcher.addAudioProcessor(medFilter);
-        dispatcher.addAudioProcessor(highFilter);
-        new Thread(dispatcher,"Audio Dispatcher").start();*/
         started = true;
         final Runnable runnable = new Runnable() {
             @Override
