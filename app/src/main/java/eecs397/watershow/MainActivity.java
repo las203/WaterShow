@@ -28,12 +28,12 @@ public class MainActivity extends AppCompatActivity {
     Button btnOn, btnOff;
     BluetoothAdapter adapter;
     BluetoothSocket socket;
-    OutputStream stream;
+    BluetoothDevice device;
     private static final String TAG = "bluetooth";
     // SPP UUID service
     private static final UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
     // MAC-address of Bluetooth module (you must edit this line)
-    private static String address = "60:BE:B5:B8:05:6D";
+    private static String address = "00:06:66:7B:AA:5D";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,7 +57,36 @@ public class MainActivity extends AppCompatActivity {
             btnOn.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     Log.d(TAG, "Click 1");
-                    sendData("1");
+                    device = adapter.getRemoteDevice(address);
+                    //if (device.getBondState()==device.BOND_BONDED) {
+
+                    Log.d(TAG, device.getName());
+                        //BluetoothSocket mSocket=null;
+                        try {
+
+
+                            socket = device.createInsecureRfcommSocketToServiceRecord(MY_UUID);
+                        } catch (IOException e1) {
+                            // TODO Auto-generated catch block
+                            Log.d(TAG, "socket not created");
+                            e1.printStackTrace();
+                        }
+                        try {
+
+                            socket.connect();
+                        } catch (IOException e) {
+                            try {
+
+                                socket.close();
+                                Log.d(TAG, "Cannot connect");
+                            } catch (IOException e1) {
+                                Log.d(TAG, "Socket not closed");
+                                // TODO Auto-generated catch block
+                                e1.printStackTrace();
+                            }
+                        }
+                        sendData("1");
+                    //}
                     Toast.makeText(getBaseContext(), "Turn on LED", Toast.LENGTH_SHORT).show();
                 }
             });
@@ -111,86 +140,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private BluetoothSocket createBluetoothSocket(BluetoothDevice device) throws IOException {
-        if(Build.VERSION.SDK_INT >= 10){
-            try {
-                final Method m = device.getClass().getMethod("createInsecureRfcommSocketToServiceRecord", new Class[] { UUID.class });
-                return (BluetoothSocket) m.invoke(device, MY_UUID);
-            } catch (Exception e) {
-                Log.e(TAG, "Could not create Insecure RFComm Connection", e);
-            }
-        }
-        return  device.createRfcommSocketToServiceRecord(MY_UUID);
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-
-        Log.d(TAG, "...onResume - try connect...");
-
-        // Set up a pointer to the remote node using it's address.
-        BluetoothDevice device = adapter.getRemoteDevice(address);
-
-        // Two things are needed to make a connection:
-        //   A MAC address, which we got above.
-        //   A Service ID or UUID.  In this case we are using the
-        //     UUID for SPP.
-
-        try {
-            socket = createBluetoothSocket(device);
-        } catch (IOException e1) {
-            errorExit("Fatal Error", "In onResume() and socket create failed: " + e1.getMessage() + ".");
-        }
-
-        // Discovery is resource intensive.  Make sure it isn't going on
-        // when you attempt to connect and pass your message.
-        adapter.cancelDiscovery();
-
-        // Establish the connection.  This will block until it connects.
-        Log.d(TAG, "...Connecting...");
-        try {
-            socket.connect();
-            Log.d(TAG, "...Connection ok...");
-        } catch (IOException e) {
-            try {
-                socket.close();
-            } catch (IOException e2) {
-                errorExit("Fatal Error", "In onResume() and unable to close socket during connection failure" + e2.getMessage() + ".");
-            }
-        }
-
-        // Create a data stream so we can talk to server.
-        Log.d(TAG, "...Create Socket...");
-
-        try {
-            stream = socket.getOutputStream();
-        } catch (IOException e) {
-            errorExit("Fatal Error", "In onResume() and output stream creation failed:" + e.getMessage() + ".");
-        }
-    }
-
-    @Override
-    public void onPause() {
-        super.onPause();
-
-        Log.d(TAG, "...In onPause()...");
-
-        if (stream != null) {
-            try {
-                stream.flush();
-            } catch (IOException e) {
-                errorExit("Fatal Error", "In onPause() and failed to flush output stream: " + e.getMessage() + ".");
-            }
-        }
-
-        try     {
-            socket.close();
-        } catch (IOException e2) {
-            errorExit("Fatal Error", "In onPause() and failed to close socket." + e2.getMessage() + ".");
-        }
-    }
-
     private void errorExit(String title, String message){
         Toast.makeText(getBaseContext(), title + " - " + message, Toast.LENGTH_LONG).show();
         finish();
@@ -199,15 +148,16 @@ public class MainActivity extends AppCompatActivity {
     private void sendData(String message) {
         byte[] msgBuffer = message.getBytes();
 
-        Log.d(TAG, "...Send data: " + message + "...");
+        //Log.d(TAG, "...Send data: " + message + "...");
 
         try {
-            stream.write(msgBuffer);
+            socket.getOutputStream().write(msgBuffer);
+            Log.e("Sending", "Stuff");
         } catch (IOException e) {
             String msg = "In onResume() and an exception occurred during write: " + e.getMessage();
             if (address.equals("00:00:00:00:00:00"))
                 msg = msg + ".\n\nUpdate your server address from 00:00:00:00:00:00 to the correct address on line 35 in the java code";
-            msg = msg +  ".\n\nCheck that the SPP UUID: " + MY_UUID.toString() + " exists on server.\n\n";
+            msg = msg + ".\n\nCheck that the SPP UUID: " + MY_UUID.toString() + " exists on server.\n\n";
 
             errorExit("Fatal Error", msg);
         }
